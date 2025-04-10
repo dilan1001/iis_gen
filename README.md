@@ -5,7 +5,7 @@ A specialized bash tool for creating wordlists specifically designed to exploit 
 ## Installation
 
 ```bash
-git clone https://github.com/nemmusu/iis-gen.git
+git clone https://github.com/nemmusu/iis_gen.git
 cd iis_gen
 chmod +x iis_gen.sh
 ```
