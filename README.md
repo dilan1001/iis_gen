@@ -39,13 +39,14 @@ The tool enhances the guessing attack by:
 
 - **Filtering Capabilities:**
   - Keyword prefix or regex filtering
-  - Length constraints (min/max)
+  - Length constraints (min/max) for both main wordlists and secondary lists
   - Character type filtering (numbers, special chars)
   - Extension inclusion/exclusion
 
 - **Word Manipulation:**
   - List intersection for common entries
   - Cross-combination with separators
+  - Pair-combine for one-to-one word combinations (with cycling option)
   - Text transform operations (append, prepend, replace)
 
 ## Complete Usage Guide
@@ -70,10 +71,12 @@ Apply length filters:
 ./iis_gen.sh -d /path/to/wordlists -o output.txt -k config --min-length 5 --max-length 12
 ```
 
-Filter out entries with numbers or special characters:
+Filter out entries with numbers or remove special characters from words:
 
 ```bash
-./iis_gen.sh -d /path/to/wordlists -o output.txt -k user --remove-numbers --remove-special
+./iis_gen.sh -d /path/to/wordlists -o output.txt -k user --remove-numbers # Removes words containing numbers
+./iis_gen.sh -d /path/to/wordlists -o output.txt -k user --remove-special # Strip special chars, keep alphanumeric, _ and -
+./iis_gen.sh -d /path/to/wordlists -o output.txt -k user --remove-chars ".,/" # Remove only periods, commas and slashes
 ```
 
 ### File Selection
@@ -125,16 +128,20 @@ Another replace example:
 
 ### List Manipulation
 
-Filter for words present in additional lists (intersection):
+Combine words from additional lists:
 
 ```bash
-./iis_gen.sh -d /path/to/wordlists -o output.txt -k user --combine /path/to/list1.txt,/path/to/list2.txt
-```
+# Default mode is now pair-combine (first+first, second+second, etc.)
+./iis_gen.sh -d /path/to/wordlists -o output.txt -k user --combine /path/to/list1.txt
 
-Create all possible combinations with custom separator:
-
-```bash
+# Create all possible combinations between lists
 ./iis_gen.sh -d /path/to/wordlists -o output.txt -k config --cross-combine --combine /path/to/numbers.txt --combine-sep "-"
+
+# Combine words one-to-one (first with first, second with second)
+./iis_gen.sh -d /path/to/wordlists -o output.txt -k admin --pair-combine --combine /path/to/config_list.txt
+
+# Combine words one-to-one but reuse shorter list if needed
+./iis_gen.sh -d /path/to/wordlists -o output.txt -k admin --pair-combine-cycle --combine /path/to/short_list.txt
 ```
 
 Separator options:
@@ -247,17 +254,22 @@ Below is an example of running the tool with the following parameters:
 ### Filter Parameters
 - `-r, --regex` - Use regex for keyword matching
 - `--lowercase` - Convert all output to lowercase
-- `--min-length NUM` - Minimum word length
-- `--max-length NUM` - Maximum word length
+- `--min-length NUM` - Minimum word length for main wordlist
+- `--max-length NUM` - Maximum word length for main wordlist
+- `--combine-min-length NUM` - Minimum length for words in secondary lists before combining
+- `--combine-max-length NUM` - Maximum length for words in secondary lists before combining
 - `--remove-numbers` - Remove words containing numbers
-- `--remove-special` - Remove words with special characters
+- `--remove-special` - Remove special characters from words (keeps alphanumeric, underscore and hyphen)
+- `--remove-chars CHARS` - Remove specific characters from words (e.g. ".,/" removes periods, commas, slashes)
 - `-e, --extensions LIST` - Process only specific extensions (comma-separated)
 - `-i, --ignore LIST` - Ignore specific extensions (comma-separated)
 
 ### Transformation Parameters
-- `--combine FILES` - Add words from specified files
+- `--combine FILES` - Combine words from specified files (defaults to pair-combine)
 - `--cross-combine` - Generate all combinations between lists
-- `--combine-sep SEP` - Separator for combinations (default: "_")
+- `--pair-combine` - Combine words one-to-one (first with first, second with second)
+- `--pair-combine-cycle` - Like pair-combine but reuse shorter list if needed
+- `--combine-sep SEP` - Separator for combinations (default: "_") 
 - `--append STR` - Append string to each word
 - `--prepend STR` - Prepend string to each word
 - `--replace PAT:REP` - Replace pattern with replacement

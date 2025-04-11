@@ -43,8 +43,11 @@ IGNORE_EXTENSIONS=""
 ONLY_EXTENSIONS=""
 REMOVE_NUMBERS=0
 REMOVE_SPECIAL=0
+REMOVE_CHARS=""
 MIN_LENGTH=0
 MAX_LENGTH=0
+COMBINE_MIN_LENGTH=0
+COMBINE_MAX_LENGTH=0
 APPEND_STRING=""
 PREPEND_STRING=""
 REPLACE_PATTERN=""
@@ -56,10 +59,69 @@ COMBINE_MODE="AND"
 COMBINE_FILES=""
 COMBINE_WORDS=0
 CROSS_COMBINE=0
+PAIR_COMBINE=0
+CYCLE_COMBINE=0
 COMBINE_SEPARATOR="_"
 SKIP_BINARY=1
 FORCE_LOWERCASE=0
+DEFAULT_PAIR_COMBINE=1  # Usa pair-combine come default quando si specifica solo --combine
 TEMP_DIR=$(mktemp -d)
+
+# Function to apply length and character filters to a wordlist
+apply_filters() {
+    local input_file="$1"
+    local output_file="$2"
+    local min_length="$3"
+    local max_length="$4"
+    local remove_numbers="$5"
+    local remove_special="$6"
+    local remove_chars="$7"
+    local filter_name="$8"  # Nome identificativo per i messaggi
+    
+    # Create a temporary filter pipeline
+    local filter_cmds="cat \"$input_file\" | "
+    
+    # Apply minimum length filtering if specified
+    if [[ "$min_length" -gt 0 ]]; then
+        echo -e "[${BLUE}INFO${NC}] ${filter_name}: Filtering words with minimum length of $min_length"
+        filter_cmds+="awk 'length >= $min_length' | "
+    fi
+    
+    # Apply maximum length filtering if specified
+    if [[ "$max_length" -gt 0 ]]; then
+        echo -e "[${BLUE}INFO${NC}] ${filter_name}: Filtering words with maximum length of $max_length"
+        filter_cmds+="awk 'length <= $max_length' | "
+    fi
+    
+    # Remove words with numbers if requested
+    if [[ "$remove_numbers" -eq 1 ]]; then
+        echo -e "[${BLUE}INFO${NC}] ${filter_name}: Removing words containing numbers"
+        filter_cmds+="grep -v '[0-9]' | "
+    fi
+    
+    # Remove special characters if requested
+    if [[ "$remove_special" -eq 1 ]]; then
+        echo -e "[${BLUE}INFO${NC}] ${filter_name}: Removing special characters from words (keeping only alphanumeric, underscore and hyphen)"
+        filter_cmds+="sed 's/[^a-zA-Z0-9_-]//g' | grep -v '^$' | "
+    fi
+    
+    # Remove specific characters if requested
+    if [[ -n "$remove_chars" ]]; then
+        echo -e "[${BLUE}INFO${NC}] ${filter_name}: Removing specified characters: $remove_chars"
+        # Escape special characters for sed
+        local escaped_chars=$(echo "$remove_chars" | sed 's/[][\/]/\\&/g')
+        filter_cmds+="sed 's/[$escaped_chars]//g' | grep -v '^$' | "
+    fi
+    
+    # Finish with sort -u
+    filter_cmds+="sort -u > \"$output_file\""
+    
+    # Execute the filter pipeline
+    eval "$filter_cmds"
+    
+    # Return word count for reporting
+    wc -l < "$output_file"
+}
 
 # Function to display usage
 show_usage() {
@@ -80,13 +142,18 @@ show_usage() {
     echo "  -i, --ignore LIST      Ignore files with these extensions (comma-separated)"
     echo "  --min-length NUM       Only include words with at least NUM characters"
     echo "  --max-length NUM       Only include words with at most NUM characters"
+    echo "  --combine-min-length NUM       Minimum length for words in secondary lists before combining"
+    echo "  --combine-max-length NUM       Maximum length for words in secondary lists before combining"
     echo "  --remove-numbers       Remove words containing numbers"
-    echo "  --remove-special       Remove words containing special characters"
+    echo "  --remove-special       Remove special characters from words (keeps alphanumeric, underscore and hyphen)"
+    echo "  --remove-chars CHARS   Remove specified characters from words (e.g. \".,/\" removes periods, commas, slashes)"
     echo "  --no-binary-check      Don't skip binary files (default: binary files are skipped)"
     echo ""
     echo -e "${BOLD}Combining Lists:${NC}"
-    echo "  --combine FILE1,FILE2  Combine words from these files with the main results (using intersection)"
+    echo "  --combine FILE1,FILE2  Combine words from these files (defaults to pair-combine if no mode specified)"
     echo "  --cross-combine        Generate all combinations of words between lists"
+    echo "  --pair-combine         Combine words one-to-one (first with first, second with second, etc.)"
+    echo "  --pair-combine-cycle   Like --pair-combine but reuse shorter list cyclically if needed"
     echo "  --combine-sep SEP      Separator for combined words (default: '_')"
     echo ""
     echo -e "${BOLD}Processing Options:${NC}"
@@ -106,7 +173,11 @@ show_usage() {
     echo "  $0 -d /wordlists -o output.txt -k '^aspnet' -r --append .txt" 
     echo "  $0 -d /wordlists -o combined.txt -k default --combine /path/to/custom_list.txt"
     echo "  $0 -d /wordlists -o cross.txt -k webconfig --cross-combine --combine /path/to/extensions.txt --combine-sep '.'"
+    echo "  $0 -d /wordlists -o pair.txt -k admin --pair-combine --combine /path/to/config_list.txt --combine-sep '-'"
+    echo "  $0 -d /wordlists -o cycling.txt -k admin --pair-combine-cycle --combine /path/to/short_list.txt"
     echo "  $0 -d /wordlists -o extensions.txt -k 'web' --replace '.txt:.aspx'"
+    echo "  $0 -d /wordlists -o clean.txt -k config --remove-special"
+    echo "  $0 -d /wordlists -o filtered.txt -k web --remove-chars \".,_-\""
 }
 
 # Function to clean temporary files
@@ -276,6 +347,12 @@ print_stats_box() {
         if [[ "$COMBINE_LISTS" -eq 1 ]]; then
             if [[ "$CROSS_COMBINE" -eq 1 ]]; then
                 content_lines[$i]="Combination: Cross-combined with separator '$COMBINE_SEPARATOR'"; ((i++))
+            elif [[ "$PAIR_COMBINE" -eq 1 ]]; then
+                if [[ "$CYCLE_COMBINE" -eq 1 ]]; then
+                    content_lines[$i]="Combination: One-to-one combined with separator '$COMBINE_SEPARATOR' (cycling)"; ((i++))
+                else
+                    content_lines[$i]="Combination: One-to-one combined with separator '$COMBINE_SEPARATOR'"; ((i++))
+                fi
             else
                 content_lines[$i]="Combination: Intersection mode with custom files"; ((i++))
             fi
@@ -501,6 +578,16 @@ cross_combine_words() {
     local output="$4"
     local temp_output="$TEMP_DIR/cross_temp.txt"
     
+    # Check if we have append/prepend options active
+    local append_str="${APPEND_STRING}"
+    local prepend_str="${PREPEND_STRING}"
+    local using_special_combine=0
+    
+    if [[ -n "$append_str" || -n "$prepend_str" ]]; then
+        using_special_combine=1
+        echo -e "[${BLUE}INFO${NC}] Cross combining with prepend/append applied only once per combined word"
+    fi
+    
     echo -e "[${BLUE}INFO${NC}] Cross combining all words using separator '$separator'"
     > "$temp_output"
     
@@ -508,7 +595,13 @@ cross_combine_words() {
     while IFS= read -r word1; do
         # Combine with each word in the second list
         while IFS= read -r word2; do
-            echo "${word1}${separator}${word2}" >> "$temp_output"
+            if [[ "$using_special_combine" -eq 1 ]]; then
+                # Apply prepend only to the first word and append only to the last word
+                echo "${prepend_str}${word1}${separator}${word2}${append_str}" >> "$temp_output"
+            else
+                # Standard behavior without prepend/append
+                echo "${word1}${separator}${word2}" >> "$temp_output"
+            fi
         done < "$list2"
     done < "$list1"
     
@@ -521,6 +614,88 @@ cross_combine_words() {
     fi
 }
 
+# Pair combine words from two lists with a separator (one-to-one)
+pair_combine_words() {
+    local list1="$1"
+    local list2="$2" 
+    local separator="$3"
+    local output="$4"
+    local temp_output="$TEMP_DIR/pair_temp.txt"
+    
+    # Check if we have append/prepend options active
+    local append_str="${APPEND_STRING}"
+    local prepend_str="${PREPEND_STRING}"
+    local using_special_combine=0
+    
+    if [[ -n "$append_str" || -n "$prepend_str" ]]; then
+        using_special_combine=1
+        echo -e "[${BLUE}INFO${NC}] Pair combining with prepend/append applied only once per combined word"
+    fi
+    
+    if [[ "$CYCLE_COMBINE" -eq 1 ]]; then
+        echo -e "[${BLUE}INFO${NC}] Pair combining words using separator '$separator' (with cycling)"
+    else
+        echo -e "[${BLUE}INFO${NC}] Pair combining words using separator '$separator'"
+    fi
+    
+    > "$temp_output"
+    
+    # Create arrays to hold the words from both lists
+    mapfile -t list1_words < "$list1"
+    mapfile -t list2_words < "$list2"
+    
+    # Get the count of words in each list
+    local count1=${#list1_words[@]}
+    local count2=${#list2_words[@]}
+    
+    # Determine how many combinations to generate
+    local combinations=$count1
+    if [[ "$CYCLE_COMBINE" -eq 0 && $count2 -lt $count1 ]]; then
+        # If not cycling and list2 is shorter, limit to length of list2
+        combinations=$count2
+    fi
+    
+    echo -e "[${BLUE}INFO${NC}] List 1: $count1 words, List 2: $count2 words"
+    
+    # Generate pairs
+    for ((i=0; i<combinations; i++)); do
+        local word1="${list1_words[$i]}"
+        local idx2=$i
+        
+        # If cycling and we've reached the end of list2, wrap around
+        if [[ $idx2 -ge $count2 ]]; then
+            if [[ "$CYCLE_COMBINE" -eq 1 ]]; then
+                idx2=$((idx2 % count2)) # Wrap around using modulo
+            else
+                # We've exhausted list2 and not cycling
+                break
+            fi
+        fi
+        
+        local word2="${list2_words[$idx2]}"
+        
+        # Format output based on options
+        if [[ "$using_special_combine" -eq 1 ]]; then
+            # Apply prepend/append only once to the combined result
+            echo "${prepend_str}${word1}${separator}${word2}${append_str}" >> "$temp_output"
+        else
+            # Standard behavior without prepend/append
+            echo "${word1}${separator}${word2}" >> "$temp_output"
+        fi
+    done
+    
+    # Move to output
+    if [[ -s "$temp_output" ]]; then
+        sort -u "$temp_output" > "$output"
+    else
+        # Create empty file if no combinations generated
+        touch "$output"
+    fi
+    
+    local total_pairs=$(wc -l < "$output")
+    echo -e "[${BLUE}INFO${NC}] Generated $total_pairs unique word pairs"
+}
+
 # Combine list function 
 combine_lists() {
     local main_list="$1"
@@ -531,29 +706,76 @@ combine_lists() {
     if [[ "$CROSS_COMBINE" -eq 1 ]]; then
         # Cross combine with separator
         cross_combine_words "$main_list" "$combined_list" "$COMBINE_SEPARATOR" "$output"
+    elif [[ "$PAIR_COMBINE" -eq 1 ]]; then
+        # Pair combine with separator (one-to-one)
+        pair_combine_words "$main_list" "$combined_list" "$COMBINE_SEPARATOR" "$output"
+    elif [[ "$DEFAULT_PAIR_COMBINE" -eq 1 ]]; then
+        # Use pair-combine as default when no other mode specified
+        echo -e "[${BLUE}INFO${NC}] Using pair-combine as default mode (one-to-one matching)"
+        pair_combine_words "$main_list" "$combined_list" "$COMBINE_SEPARATOR" "$output"
     else
         # Always use intersection mode (AND)
         echo -e "[${BLUE}INFO${NC}] Combining lists using intersection mode"
         
+        # If we have clean version of the words (before prepend/append), use those for matching
+        local main_clean="$main_list"
+        if [[ -n "$PREPEND_STRING" || -n "$APPEND_STRING" ]] && [[ -f "$TEMP_DIR/clean_unified.txt" ]]; then
+            # Use the clean version for matching
+            echo -e "[${BLUE}INFO${NC}] Using clean words (without prepend/append) for intersection matching"
+            main_clean="$TEMP_DIR/clean_unified.txt"
+        fi
+        
         # Create temporary files for processing
-        sort "$main_list" | uniq > "$TEMP_DIR/main_sorted.txt"
+        sort "$main_clean" | uniq > "$TEMP_DIR/main_sorted.txt"
         sort "$combined_list" | uniq > "$TEMP_DIR/combined_sorted.txt"
         
+        echo -e "[${BLUE}INFO${NC}] Finding words present in both lists (intersection mode)"
+        
+        # Check if we need to handle append/prepend by showing original contents
+        if [[ -v VERBOSE && "$VERBOSE" -eq 1 ]]; then
+            echo -e "[${BLUE}INFO${NC}] Debug: displaying file contents for main list"
+            head -n 5 "$TEMP_DIR/main_sorted.txt"
+            echo -e "[${BLUE}INFO${NC}] Debug: displaying file contents for combined list"
+            head -n 5 "$TEMP_DIR/combined_sorted.txt"
+        fi
+        
         # Find common words between the lists
-        if [[ "$COMBINE_SEPARATOR" != "_" ]]; then
-            echo -e "[${BLUE}INFO${NC}] Using custom separator '$COMBINE_SEPARATOR' for intersection mode"
-            # Create temp file for intersection results without separator
-            comm -12 "$TEMP_DIR/main_sorted.txt" "$TEMP_DIR/combined_sorted.txt" > "$TEMP_DIR/intersection.txt"
-            
-            # Now apply the separator to each word in the intersection results
-            > "$output"
+        # comm works by comparing two sorted lists, so both need to be properly sorted
+        comm -12 "$TEMP_DIR/main_sorted.txt" "$TEMP_DIR/combined_sorted.txt" > "$TEMP_DIR/intersection.txt"
+        
+        # Count how many common words were found
+        local common_count=$(wc -l < "$TEMP_DIR/intersection.txt")
+        echo -e "[${BLUE}INFO${NC}] Found $common_count words common to both lists"
+        
+        # Process the results according to format options
+        > "$output"  # Initialize the output file
+        
+        # Check if we have append/prepend options active
+        local append_str="${APPEND_STRING}"
+        local prepend_str="${PREPEND_STRING}"
+        local using_special_format=0
+        
+        if [[ -n "$append_str" || -n "$prepend_str" ]]; then
+            using_special_format=1
+            echo -e "[${BLUE}INFO${NC}] Applying prepend/append to intersection results"
+        fi
+        
+        # Apply formatting to each common word
+        if [[ $common_count -gt 0 ]]; then
             while IFS= read -r word; do
-                # For direct intersection mode, apply separator to the word itself
-                echo "${word}${COMBINE_SEPARATOR}${word}" >> "$output"
+                if [[ "$using_special_format" -eq 1 ]]; then
+                    # Apply prepend/append only once per word
+                    echo "${prepend_str}${word}${append_str}" >> "$output"
+                else
+                    # Just use the original word without formatting
+                    echo "${word}" >> "$output"
+                fi
             done < "$TEMP_DIR/intersection.txt"
-        else
-            # Standard intersection mode without custom separator
-            comm -12 "$TEMP_DIR/main_sorted.txt" "$TEMP_DIR/combined_sorted.txt" > "$output"
+        fi
+        
+        # If custom separator was specified, acknowledge it (but don't double-apply words)
+        if [[ "$COMBINE_SEPARATOR" != "_" && $common_count -gt 0 ]]; then
+            echo -e "[${BLUE}INFO${NC}] Note: custom separator '$COMBINE_SEPARATOR' is not used in intersection mode"
         fi
     fi
 }
@@ -576,10 +798,15 @@ while [[ "$#" -gt 0 ]]; do
         -i|--ignore) IGNORE_EXTENSIONS="$2"; shift ;;
         --min-length) MIN_LENGTH="$2"; shift ;;
         --max-length) MAX_LENGTH="$2"; shift ;;
+        --combine-min-length) COMBINE_MIN_LENGTH="$2"; shift ;;
+        --combine-max-length) COMBINE_MAX_LENGTH="$2"; shift ;;
         --remove-numbers) REMOVE_NUMBERS=1 ;;
         --remove-special) REMOVE_SPECIAL=1 ;;
+        --remove-chars) REMOVE_CHARS="$2"; shift ;;
         --no-binary-check) SKIP_BINARY=0 ;;
-        --cross-combine) CROSS_COMBINE=1 ;;
+        --cross-combine) CROSS_COMBINE=1; PAIR_COMBINE=0 ;;
+        --pair-combine) PAIR_COMBINE=1; CROSS_COMBINE=0; CYCLE_COMBINE=0 ;;
+        --pair-combine-cycle) PAIR_COMBINE=1; CROSS_COMBINE=0; CYCLE_COMBINE=1 ;;
         --lowercase) FORCE_LOWERCASE=1 ;;
         --combine-sep) COMBINE_SEPARATOR="$2"; shift ;;
         --combine) COMBINE_FILES="$2"; COMBINE_LISTS=1; shift ;;
@@ -605,6 +832,7 @@ while [[ "$#" -gt 0 ]]; do
                                         "-r" "--regex" "-j" "--jobs" "-e" "--extensions" 
                                         "-i" "--ignore" "--min-length" "--max-length" "--remove-numbers" 
                                         "--remove-special" "--no-binary-check" "--cross-combine" 
+                                        "--pair-combine" "--pair-combine-cycle"
                                         "--lowercase" "--combine-sep" "--combine" "--combine-mode"
                                         "--append" "--prepend" "--replace" "-h" "--help")
             
@@ -1019,6 +1247,28 @@ sort "$TEMP_DIR/case_unified.txt" > "$TEMP_DIR/sorted_unified.txt"
 # Replace the output file with case-unified version
 mv "$TEMP_DIR/sorted_unified.txt" "$OUTFILE"
 
+# Apply length and character filters early in the process, right after case unification
+if [[ "$MIN_LENGTH" -gt 0 || "$MAX_LENGTH" -gt 0 || "$REMOVE_NUMBERS" -eq 1 || "$REMOVE_SPECIAL" -eq 1 || -n "$REMOVE_CHARS" ]]; then
+    echo -e "[${BLUE}INFO${NC}] Applying early filters to main wordlist"
+    
+    # Create a temporary file to store filtered output
+    FILTERED_MAIN="$TEMP_DIR/filtered_main.txt"
+    
+    # Apply the filters to the main file
+    FILTERED_COUNT=$(apply_filters "$OUTFILE" "$FILTERED_MAIN" \
+                    "$MIN_LENGTH" "$MAX_LENGTH" \
+                    "$REMOVE_NUMBERS" "$REMOVE_SPECIAL" "$REMOVE_CHARS" \
+                    "Main wordlist")
+    
+    # Replace the output with the filtered version
+    echo -e "[${BLUE}INFO${NC}] Filtered main wordlist from $(wc -l < "$OUTFILE") to $FILTERED_COUNT words"
+    mv "$FILTERED_MAIN" "$OUTFILE"
+fi
+
+# Save a clean copy of the filtered case-unified words BEFORE applying append/prepend modifiers
+# We'll use this for intersection operations to avoid mismatches
+cp "$OUTFILE" "$TEMP_DIR/clean_unified.txt"
+
 # Remove lines after certain delimiters
 POST_PROCESSING_CMDS+="sed 's/[.,\/\\:;].*$//' | "
 
@@ -1028,43 +1278,48 @@ if [[ -n "$REPLACE_PATTERN" ]]; then
     POST_PROCESSING_CMDS+="sed 's/$REPLACE_PATTERN/$REPLACE_WITH/g' | "
 fi
 
-# Apply prepend
+# Check if we need to delay append/prepend for intersection operations
+DELAY_MODIFIERS=0
+if [[ "$COMBINE_LISTS" -eq 1 && "$CROSS_COMBINE" -ne 1 ]]; then
+    DELAY_MODIFIERS=1
+    if [[ -n "$PREPEND_STRING" || -n "$APPEND_STRING" ]]; then
+        echo -e "[${BLUE}INFO${NC}] Will apply prepend/append after intersection for correct matching"
+    fi
+fi
+
+# Apply prepend if appropriate
 if [[ -n "$PREPEND_STRING" ]]; then
-    echo -e "[${BLUE}INFO${NC}] Prepending '$PREPEND_STRING' to each word"
-    # Uso di awk invece di sed per evitare problemi di escape con caratteri speciali
-    POST_PROCESSING_CMDS+="awk '{print \"$PREPEND_STRING\" \$0}' | "
+    if [[ "$CROSS_COMBINE" -eq 1 && "$COMBINE_LISTS" -eq 1 ]]; then
+        echo -e "[${BLUE}INFO${NC}] Prepend will be applied during cross combination"
+    elif [[ "$DELAY_MODIFIERS" -eq 1 ]]; then
+        echo -e "[${BLUE}INFO${NC}] Prepend will be applied after intersection"
+        # Don't add to POST_PROCESSING_CMDS yet, we'll apply it later
+    else
+        echo -e "[${BLUE}INFO${NC}] Prepending '$PREPEND_STRING' to each word"
+        # Uso di awk invece di sed per evitare problemi di escape con caratteri speciali
+        POST_PROCESSING_CMDS+="awk '{print \"$PREPEND_STRING\" \$0}' | "
+    fi
 fi
 
-# Apply append
+# Apply append if appropriate
 if [[ -n "$APPEND_STRING" ]]; then
-    echo -e "[${BLUE}INFO${NC}] Appending '$APPEND_STRING' to each word"
-    # Uso di awk invece di sed per evitare problemi di escape con caratteri speciali
-    POST_PROCESSING_CMDS+="awk '{print \$0 \"$APPEND_STRING\"}' | "
+    if [[ "$CROSS_COMBINE" -eq 1 && "$COMBINE_LISTS" -eq 1 ]]; then
+        echo -e "[${BLUE}INFO${NC}] Append will be applied during cross combination"
+    elif [[ "$DELAY_MODIFIERS" -eq 1 ]]; then
+        echo -e "[${BLUE}INFO${NC}] Append will be applied after intersection"
+        # Don't add to POST_PROCESSING_CMDS yet, we'll apply it later
+    else
+        echo -e "[${BLUE}INFO${NC}] Appending '$APPEND_STRING' to each word"
+        # Uso di awk invece di sed per evitare problemi di escape con caratteri speciali
+        POST_PROCESSING_CMDS+="awk '{print \$0 \"$APPEND_STRING\"}' | "
+    fi
 fi
 
-# Remove words with numbers if requested
-if [[ "$REMOVE_NUMBERS" -eq 1 ]]; then
-    echo -e "[${BLUE}INFO${NC}] Removing words containing numbers"
-    POST_PROCESSING_CMDS+="grep -v '[0-9]' | "
-fi
+# Number and character filtering is now done early in the process
+# We don't apply these filters in post-processing anymore
 
-# Remove words with special characters if requested
-if [[ "$REMOVE_SPECIAL" -eq 1 ]]; then
-    echo -e "[${BLUE}INFO${NC}] Removing words containing special characters"
-    POST_PROCESSING_CMDS+="grep -v '[^a-zA-Z0-9]' | "
-fi
-
-# Apply minimum length filtering
-if [[ "$MIN_LENGTH" -gt 0 ]]; then
-    echo -e "[${BLUE}INFO${NC}] Filtering words with minimum length of $MIN_LENGTH"
-    POST_PROCESSING_CMDS+="awk 'length >= $MIN_LENGTH' | "
-fi
-
-# Apply maximum length filtering
-if [[ "$MAX_LENGTH" -gt 0 ]]; then
-    echo -e "[${BLUE}INFO${NC}] Filtering words with maximum length of $MAX_LENGTH"
-    POST_PROCESSING_CMDS+="awk 'length <= $MAX_LENGTH' | "
-fi
+# MIN_LENGTH and MAX_LENGTH are applied directly at the beginning of the process
+# The filters in post-processing have been moved
 
 # Convert to lowercase if requested
 if [[ "$FORCE_LOWERCASE" -eq 1 ]]; then
@@ -1100,14 +1355,26 @@ if [[ -s "$OUTFILE" ]]; then
         done
         
         if [[ -s "$COMBINED_TEMP" ]]; then
-            # Apply the combine operation
+            # Apply length and character filters to the combined list before combining
+            FILTERED_COMBINED_TEMP="$TEMP_DIR/filtered_combined_lists.txt"
+            
+            # Apply filters to the combined list if specified
+            COMBINED_COUNT=$(apply_filters "$COMBINED_TEMP" "$FILTERED_COMBINED_TEMP" \
+                             "$COMBINE_MIN_LENGTH" "$COMBINE_MAX_LENGTH" \
+                             "$REMOVE_NUMBERS" "$REMOVE_SPECIAL" "$REMOVE_CHARS" \
+                             "Secondary lists")
+                             
+            # Apply the combine operation using the filtered combined list
             FINAL_OUTPUT="$TEMP_DIR/final_output.txt"
-            combine_lists "$TEMP_DIR/processed_output.txt" "$COMBINED_TEMP" "$COMBINE_MODE" "$FINAL_OUTPUT"
+            combine_lists "$TEMP_DIR/processed_output.txt" "$FILTERED_COMBINED_TEMP" "$COMBINE_MODE" "$FINAL_OUTPUT"
             
             # Count the original and final results
             ORIG_COUNT=$(wc -l < "$TEMP_DIR/processed_output.txt")
-            COMBINED_COUNT=$(wc -l < "$COMBINED_TEMP")
             FINAL_COUNT=$(wc -l < "$FINAL_OUTPUT")
+            
+            # Note: We don't need to filter again here,
+            # since filtering is already done before combination
+            # This preserves any appended/prepended strings or separators
             
             # Move the final output to the specified output file
             mv "$FINAL_OUTPUT" "$OUTPUT"
