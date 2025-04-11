@@ -2,7 +2,6 @@
 #
 # IIS_GEN - IIS Tilde Enumeration Dictionary Generator
 # A specialized tool for creating wordlists targeting IIS short-name (8.3) disclosure vulnerability
-# Author: Created for IIS tilde enumeration attacks and short-name detection
 #
 
 # Text colors and formatting
