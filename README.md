@@ -110,8 +110,14 @@ Convert output to lowercase:
 Append or prepend strings:
 
 ```bash
-./iis_gen.sh -d /path/to/wordlists -o output.txt -k config --append ".txt"
+./iis_gen.sh -d /path/to/wordlists -o output.txt -k config --append ".html"
 ./iis_gen.sh -d /path/to/wordlists -o output.txt -k config --prepend "backup_"
+```
+
+Multiple append values (generates multiple variants for each word):
+
+```bash
+./iis_gen.sh -d /path/to/wordlists -o output.txt -k web --append ".htm .html"
 ```
 
 Replace patterns in words:
@@ -270,7 +276,7 @@ Below is an example of running the tool with the following parameters:
 - `--pair-combine` - Combine words one-to-one (first with first, second with second)
 - `--pair-combine-cycle` - Like pair-combine but reuse shorter list if needed
 - `--combine-sep SEP` - Separator for combinations (default: "_") 
-- `--append STR` - Append string to each word
+- `--append STR` - Append string to each word (supports multiple values separated by spaces to generate variants)
 - `--prepend STR` - Prepend string to each word
 - `--replace PAT:REP` - Replace pattern with replacement
 
