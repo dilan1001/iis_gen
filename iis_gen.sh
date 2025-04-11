@@ -2,6 +2,7 @@
 #
 # IIS_GEN - IIS Tilde Enumeration Dictionary Generator
 # A specialized tool for creating wordlists targeting IIS short-name (8.3) disclosure vulnerability
+# Author: Created for IIS tilde enumeration attacks and short-name detection
 #
 
 # Text colors and formatting
@@ -64,6 +65,7 @@ COMBINE_SEPARATOR="_"
 SKIP_BINARY=1
 FORCE_LOWERCASE=0
 DEFAULT_PAIR_COMBINE=1  # Usa pair-combine come default quando si specifica solo --combine
+GENERATE_HTML_VARIANTS=1  # Genera varianti .htm e .html automaticamente
 TEMP_DIR=$(mktemp -d)
 
 # Function to apply length and character filters to a wordlist
@@ -156,7 +158,7 @@ show_usage() {
     echo "  --combine-sep SEP      Separator for combined words (default: '_')"
     echo ""
     echo -e "${BOLD}Processing Options:${NC}"
-    echo "  --append STR           Append string to each word"
+    echo "  --append STR           Append string to each word (use spaces to separate multiple extensions, e.g. '.htm .html .aspx')"
     echo "  --prepend STR          Prepend string to each word"
     echo "  --replace PAT:REP      Replace pattern with replacement in each word"
     echo "  -j, --jobs NUM         Number of parallel jobs (default: 4)"
@@ -170,6 +172,7 @@ show_usage() {
     echo "  $0 -d /usr/share/wordlists -o web_paths.txt -k config"
     echo "  $0 -d /wordlists -o iis_files.txt -k web -r --min-length 5"
     echo "  $0 -d /wordlists -o output.txt -k '^aspnet' -r --append .txt" 
+    echo "  $0 -d /wordlists -o multi_ext.txt -k 'web' --append '.htm .html .aspx'"
     echo "  $0 -d /wordlists -o combined.txt -k default --combine /path/to/custom_list.txt"
     echo "  $0 -d /wordlists -o cross.txt -k webconfig --cross-combine --combine /path/to/extensions.txt --combine-sep '.'"
     echo "  $0 -d /wordlists -o pair.txt -k admin --pair-combine --combine /path/to/config_list.txt --combine-sep '-'"
@@ -1310,7 +1313,21 @@ if [[ -n "$APPEND_STRING" ]]; then
     else
         echo -e "[${BLUE}INFO${NC}] Appending '$APPEND_STRING' to each word"
         # Uso di awk invece di sed per evitare problemi di escape con caratteri speciali
-        POST_PROCESSING_CMDS+="awk '{print \$0 \"$APPEND_STRING\"}' | "
+        
+        # Check if APPEND_STRING contains multiple extensions separated by spaces
+        if [[ "$APPEND_STRING" == *" "* ]]; then
+            echo -e "[${BLUE}INFO${NC}] Multiple extensions detected, generating variants for each extension"
+            # Split APPEND_STRING by spaces and generate a variant for each extension
+            POST_PROCESSING_CMDS+="awk '{word=\$0; "
+            # Use split to handle multiple extensions
+            POST_PROCESSING_CMDS+="split(\"$APPEND_STRING\", extensions, \" \"); "
+            POST_PROCESSING_CMDS+="for(i in extensions) { "
+            POST_PROCESSING_CMDS+="if (extensions[i] != \"\") print word extensions[i]; "
+            POST_PROCESSING_CMDS+="}} ' | "
+        else
+            # Single extension, use the original logic
+            POST_PROCESSING_CMDS+="awk '{print \$0 \"$APPEND_STRING\"}' | "
+        fi
     fi
 fi
 
