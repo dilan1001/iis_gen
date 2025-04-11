@@ -177,7 +177,7 @@ show_usage() {
     echo "  $0 -d /wordlists -o cross.txt -k webconfig --cross-combine --combine /path/to/extensions.txt --combine-sep '.'"
     echo "  $0 -d /wordlists -o pair.txt -k admin --pair-combine --combine /path/to/config_list.txt --combine-sep '-'"
     echo "  $0 -d /wordlists -o cycling.txt -k admin --pair-combine-cycle --combine /path/to/short_list.txt"
-    echo "  $0 -d /wordlists -o extensions.txt -k 'web' --replace '.txt:.aspx'"
+    echo "  $0 -d /wordlists -o extensions.txt -k 'web' --replace '.txt:.html'"
     echo "  $0 -d /wordlists -o clean.txt -k config --remove-special"
     echo "  $0 -d /wordlists -o filtered.txt -k web --remove-chars \".,_-\""
 }
